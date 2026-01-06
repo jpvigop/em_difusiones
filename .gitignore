@@ -1,0 +1,22 @@
+# Excel files
+*.xlsx
+*.xls
+~$*
+
+# Output folder contents (keep folder structure)
+output/*
+!output/.gitkeep
+
+# Archivos folder contents (keep folder structure)
+archivos/*
+!archivos/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Misc
+conversation.md
+*.log
+
