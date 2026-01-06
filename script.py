@@ -7,11 +7,11 @@ import pandas as pd
 # -----------------------------
 # Config (ajustá solo esto)
 # -----------------------------
-CANDIDATOS_FILE = "archivos/enviar.xlsx"
-EXCLUIR_FILE = "archivos/excluir.xlsx"
+CANDIDATOS_FILE = "archivos/enviarvittamax.xlsx"
+EXCLUIR_FILE = "archivos/excluirvittamax.xlsx"
 
 # Nombre de la campaña (para los archivos de salida)
-CAMPAIGN_NAME = "alimentox"
+CAMPAIGN_NAME = "vittamax6-1"
 
 # Carpeta de salida (se crea automáticamente si no existe)
 OUTPUT_FOLDER = "output"
@@ -31,7 +31,7 @@ MIN_SALIDAS = 1
 MAX_SALIDAS = 2
 MIN_VENTAS = None
 MAX_VENTAS = None
-MAX_DESCUENTO_PERMITIDO = 10
+MAX_DESCUENTO_PERMITIDO = 9
 
 
 # -----------------------------
@@ -295,13 +295,12 @@ def main():
         print("Error: No encuentro los archivos.")
         sys.exit(1)
     
-    # Nombres de archivos de salida
+    # Archivo de salida (un solo archivo con 2 hojas)
     output_path = Path(OUTPUT_FOLDER)
-    out_envios = output_path / f"{CAMPAIGN_NAME}envios.xlsx"
-    out_excluidos = output_path / f"{CAMPAIGN_NAME}excluidos.xlsx"
+    out_file = output_path / f"{CAMPAIGN_NAME}.xlsx"
     
     print(f"Campaña: {CAMPAIGN_NAME}")
-    print(f"Salida: {output_path}/")
+    print(f"Salida: {out_file}")
 
     df_c = pd.read_excel(cand_path)
     # Reset index to ensure unique simple index for filtering
@@ -367,49 +366,56 @@ def main():
     df_env_out["Telefono"] = df_env_out["Telefono"].apply(
         lambda x: str(int(float(x))) if pd.notna(x) and x != "" else ""
     )
-    # Save with openpyxl and force text format on Telefono column
-    from openpyxl import load_workbook
-    from openpyxl.utils.dataframe import dataframe_to_rows
-    from openpyxl import Workbook
     
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Envios"
-    
-    # Write header
-    for col_idx, col_name in enumerate(df_env_out.columns, 1):
-        ws.cell(row=1, column=col_idx, value=col_name)
-    
-    # Write data with explicit string type for Telefono
-    telefono_col_idx = df_env_out.columns.get_loc("Telefono") + 1
-    for row_idx, row in enumerate(df_env_out.itertuples(index=False), 2):
-        for col_idx, value in enumerate(row, 1):
-            cell = ws.cell(row=row_idx, column=col_idx)
-            if col_idx == telefono_col_idx and value:
-                # Force as text by setting value as string
-                cell.value = str(value)
-                cell.number_format = '@'  # Text format
-            else:
-                cell.value = value
-    
-    wb.save(out_envios)
-
-    # Output excluidos (SOLO descuento)
+    # Preparar excluidos
     if len(df_excl_desc) > 0:
         df_excl_desc["Nombre limpio"] = df_excl_desc[col_nombre].apply(excel_nompropio_first_word)
         cols_excl = [col_nombre, "Nombre limpio", col_celular, "Motivo_Descuento"]
         if col_codigo: cols_excl.insert(0, col_codigo)
         df_ex = df_excl_desc[[c for c in cols_excl if c in df_excl_desc.columns]].copy()
-        # Ensure phone is string
         if col_celular in df_ex.columns:
             df_ex[col_celular] = df_ex[col_celular].astype(str)
-        df_ex.to_excel(out_excluidos, index=False)
     else:
-        pd.DataFrame(columns=["Nombre", "Motivo_Descuento"]).to_excel(out_excluidos, index=False)
+        df_ex = pd.DataFrame(columns=["Nombre", "Motivo_Descuento"])
+    
+    # Guardar en un solo archivo con 2 hojas
+    from openpyxl import Workbook
+    
+    wb = Workbook()
+    
+    # Hoja 1: Envios
+    ws_envios = wb.active
+    ws_envios.title = "Envios"
+    
+    for col_idx, col_name in enumerate(df_env_out.columns, 1):
+        ws_envios.cell(row=1, column=col_idx, value=col_name)
+    
+    telefono_col_idx = df_env_out.columns.get_loc("Telefono") + 1
+    for row_idx, row in enumerate(df_env_out.itertuples(index=False), 2):
+        for col_idx, value in enumerate(row, 1):
+            cell = ws_envios.cell(row=row_idx, column=col_idx)
+            if col_idx == telefono_col_idx and value:
+                cell.value = str(value)
+                cell.number_format = '@'
+            else:
+                cell.value = value
+    
+    # Hoja 2: Excluidos
+    ws_excluidos = wb.create_sheet(title="Excluidos")
+    
+    for col_idx, col_name in enumerate(df_ex.columns, 1):
+        ws_excluidos.cell(row=1, column=col_idx, value=col_name)
+    
+    for row_idx, row in enumerate(df_ex.itertuples(index=False), 2):
+        for col_idx, value in enumerate(row, 1):
+            ws_excluidos.cell(row=row_idx, column=col_idx, value=value)
+    
+    wb.save(out_file)
 
     print("="*40)
-    print(f"FINAL: {len(df_env_out)} envios generados en {out_envios}")
-    print(f"FINAL: {len(df_excl_desc)} excluidos por descuento en {out_excluidos}")
+    print(f"FINAL: {len(df_env_out)} envios en hoja 'Envios'")
+    print(f"FINAL: {len(df_ex)} excluidos en hoja 'Excluidos'")
+    print(f"Archivo: {out_file}")
     print("="*40)
 
 if __name__ == "__main__":
