@@ -400,11 +400,12 @@ def main():
     if col_ventas and col_ventas in df_keep.columns: cols_out.append(col_ventas)
     if col_mail and col_mail in df_keep.columns: cols_out.append(col_mail)
     
-    # Agregar columnas de teléfono (ambos formatos por cada número)
+    # Agregar columnas de teléfono (primero todos 598, luego todos 09)
     for i in range(max_phones):
         col_598 = f"Tel{i+1}_598" if max_phones > 1 else "Tel_598"
-        col_09 = f"Tel{i+1}_09" if max_phones > 1 else "Tel_09"
         cols_out.append(col_598)
+    for i in range(max_phones):
+        col_09 = f"Tel{i+1}_09" if max_phones > 1 else "Tel_09"
         cols_out.append(col_09)
 
     df_env_out = df_keep[[c for c in cols_out if c in df_keep.columns]].copy()
