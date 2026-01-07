@@ -7,11 +7,11 @@ import pandas as pd
 # -----------------------------
 # Config (ajustá solo esto)
 # -----------------------------
-CANDIDATOS_FILE = "archivos/enviarvittamax.xlsx"
-EXCLUIR_FILE = "archivos/excluirvittamax.xlsx"
+CANDIDATOS_FILE = "archivos/enviarmatisse.xlsx"
+EXCLUIR_FILE = "archivos/excluirmatisse.xlsx"
 
 # Nombre de la campaña (para los archivos de salida)
-CAMPAIGN_NAME = "vittamax6-1"
+CAMPAIGN_NAME = "matisse7-1"
 
 # Carpeta de salida (se crea automáticamente si no existe)
 OUTPUT_FOLDER = "output"
@@ -283,6 +283,16 @@ def get_first_valid_phone(cell_text: str) -> str:
     return ""
 
 
+def get_all_valid_phones(cell_text: str) -> list[str]:
+    """Devuelve todos los teléfonos normalizados de una celda."""
+    phones = split_into_phones(cell_text)
+    result = []
+    for p in phones:
+        n = normalize_uy(p)
+        result.append(n if n else p)
+    return result
+
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -337,7 +347,9 @@ def main():
     print(f"Contactos eliminados por coincidencia de teléfono: {count_excl_phones}")
 
     # 4. Formateo y Dedup
-    df_keep["telefono_norm"] = df_keep[col_celular].apply(get_first_valid_phone)
+    # Extraer todos los teléfonos de cada cliente
+    df_keep["__all_phones"] = df_keep[col_celular].apply(get_all_valid_phones)
+    df_keep["telefono_norm"] = df_keep["__all_phones"].apply(lambda x: x[0] if x else "")
     
     # Excluir registros sin teléfono válido (no se puede enviar WhatsApp sin teléfono)
     count_before_phone_filter = len(df_keep)
@@ -347,6 +359,17 @@ def main():
     count_before_dedup = len(df_keep)
     df_keep = df_keep.drop_duplicates(subset=["telefono_norm"], keep="first")
     print(f"Duplicados removidos (mismo número final): {count_before_dedup - len(df_keep)}")
+
+    # Determinar máximo de teléfonos por cliente
+    max_phones = df_keep["__all_phones"].apply(len).max() if len(df_keep) > 0 else 1
+    max_phones = max(1, max_phones)  # Al menos 1 columna
+    
+    # Crear columnas Telefono1, Telefono2, etc.
+    for i in range(max_phones):
+        col_name = f"Telefono{i+1}" if max_phones > 1 else "Telefono"
+        df_keep[col_name] = df_keep["__all_phones"].apply(
+            lambda phones, idx=i: str(int(float(phones[idx]))) if idx < len(phones) and phones[idx] else ""
+        )
 
     # Output envios
     df_keep["Nombre limpio"] = df_keep[col_nombre].apply(excel_nompropio_first_word)
@@ -358,14 +381,13 @@ def main():
     if col_salidas and col_salidas in df_keep.columns: cols_out.append(col_salidas)
     if col_ventas and col_ventas in df_keep.columns: cols_out.append(col_ventas)
     if col_mail and col_mail in df_keep.columns: cols_out.append(col_mail)
-    cols_out.append("telefono_norm")
+    
+    # Agregar columnas de teléfono
+    for i in range(max_phones):
+        col_name = f"Telefono{i+1}" if max_phones > 1 else "Telefono"
+        cols_out.append(col_name)
 
     df_env_out = df_keep[[c for c in cols_out if c in df_keep.columns]].copy()
-    df_env_out = df_env_out.rename(columns={"telefono_norm": "Telefono"})
-    # Ensure Telefono is stored as string to avoid scientific notation in Excel
-    df_env_out["Telefono"] = df_env_out["Telefono"].apply(
-        lambda x: str(int(float(x))) if pd.notna(x) and x != "" else ""
-    )
     
     # Preparar excluidos
     if len(df_excl_desc) > 0:
@@ -390,11 +412,13 @@ def main():
     for col_idx, col_name in enumerate(df_env_out.columns, 1):
         ws_envios.cell(row=1, column=col_idx, value=col_name)
     
-    telefono_col_idx = df_env_out.columns.get_loc("Telefono") + 1
+    # Identificar columnas de teléfono (Telefono, Telefono1, Telefono2, etc.)
+    telefono_col_indices = [i + 1 for i, col in enumerate(df_env_out.columns) if col.startswith("Telefono")]
+    
     for row_idx, row in enumerate(df_env_out.itertuples(index=False), 2):
         for col_idx, value in enumerate(row, 1):
             cell = ws_envios.cell(row=row_idx, column=col_idx)
-            if col_idx == telefono_col_idx and value:
+            if col_idx in telefono_col_indices and value:
                 cell.value = str(value)
                 cell.number_format = '@'
             else:
