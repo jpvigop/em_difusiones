@@ -293,6 +293,18 @@ def get_all_valid_phones(cell_text: str) -> list[str]:
     return result
 
 
+def format_598_to_09(phone_598: str) -> str:
+    """Convierte formato 598XXXXXXXX a 09XXXXXXX (formato tradicional UY)."""
+    if not phone_598:
+        return ""
+    d = digits_only(phone_598)
+    if d.startswith("598") and len(d) == 11:
+        # 59899123456 -> 099123456
+        return "0" + d[3:]
+    # Si no es formato 598, devolver como está
+    return d
+
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -364,11 +376,17 @@ def main():
     max_phones = df_keep["__all_phones"].apply(len).max() if len(df_keep) > 0 else 1
     max_phones = max(1, max_phones)  # Al menos 1 columna
     
-    # Crear columnas Telefono1, Telefono2, etc.
+    # Crear columnas de teléfono en ambos formatos (598 y 09)
     for i in range(max_phones):
-        col_name = f"Telefono{i+1}" if max_phones > 1 else "Telefono"
-        df_keep[col_name] = df_keep["__all_phones"].apply(
+        # Formato 598 (internacional)
+        col_598 = f"Tel{i+1}_598" if max_phones > 1 else "Tel_598"
+        df_keep[col_598] = df_keep["__all_phones"].apply(
             lambda phones, idx=i: str(int(float(phones[idx]))) if idx < len(phones) and phones[idx] else ""
+        )
+        # Formato 09 (local/tradicional)
+        col_09 = f"Tel{i+1}_09" if max_phones > 1 else "Tel_09"
+        df_keep[col_09] = df_keep["__all_phones"].apply(
+            lambda phones, idx=i: format_598_to_09(phones[idx]) if idx < len(phones) and phones[idx] else ""
         )
 
     # Output envios
@@ -382,10 +400,12 @@ def main():
     if col_ventas and col_ventas in df_keep.columns: cols_out.append(col_ventas)
     if col_mail and col_mail in df_keep.columns: cols_out.append(col_mail)
     
-    # Agregar columnas de teléfono
+    # Agregar columnas de teléfono (ambos formatos por cada número)
     for i in range(max_phones):
-        col_name = f"Telefono{i+1}" if max_phones > 1 else "Telefono"
-        cols_out.append(col_name)
+        col_598 = f"Tel{i+1}_598" if max_phones > 1 else "Tel_598"
+        col_09 = f"Tel{i+1}_09" if max_phones > 1 else "Tel_09"
+        cols_out.append(col_598)
+        cols_out.append(col_09)
 
     df_env_out = df_keep[[c for c in cols_out if c in df_keep.columns]].copy()
     
@@ -412,8 +432,8 @@ def main():
     for col_idx, col_name in enumerate(df_env_out.columns, 1):
         ws_envios.cell(row=1, column=col_idx, value=col_name)
     
-    # Identificar columnas de teléfono (Telefono, Telefono1, Telefono2, etc.)
-    telefono_col_indices = [i + 1 for i, col in enumerate(df_env_out.columns) if col.startswith("Telefono")]
+    # Identificar columnas de teléfono (Tel_598, Tel_09, Tel1_598, Tel1_09, etc.)
+    telefono_col_indices = [i + 1 for i, col in enumerate(df_env_out.columns) if col.startswith("Tel")]
     
     for row_idx, row in enumerate(df_env_out.itertuples(index=False), 2):
         for col_idx, value in enumerate(row, 1):
