@@ -369,8 +369,8 @@ def main():
     print(f"Excluidos sin teléfono válido: {count_before_phone_filter - len(df_keep)}")
     
     count_before_dedup = len(df_keep)
-    df_keep = df_keep.drop_duplicates(subset=["telefono_norm"], keep="first")
-    print(f"Duplicados removidos (mismo número final): {count_before_dedup - len(df_keep)}")
+    df_keep = df_keep.drop_duplicates(subset=["telefono_norm"], keep=False)
+    print(f"Duplicados removidos (eliminados AMBOS con mismo número): {count_before_dedup - len(df_keep)}")
 
     # Determinar máximo de teléfonos por cliente
     max_phones = df_keep["__all_phones"].apply(len).max() if len(df_keep) > 0 else 1
