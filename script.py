@@ -8,7 +8,9 @@ import pandas as pd
 # Config (ajustá solo esto)
 # -----------------------------
 CANDIDATOS_FILE = "archivos/enviarmatisse.xlsx"
-EXCLUIR_FILE = "archivos/excluirmatisse.xlsx"
+# Archivo(s) de exclusión - puede ser uno o varios separados por coma
+# Ejemplo: "archivos/excluir1.xlsx, archivos/excluir2.xlsx, archivos/socios.xlsx"
+EXCLUIR_FILES = "archivos/excluirmatisse.xlsx"
 
 # Nombre de la campaña (para los archivos de salida)
 CAMPAIGN_NAME = "matisse7-1"
@@ -146,28 +148,43 @@ def read_all_sheets_excel(path: str) -> list[pd.DataFrame]:
     return [pd.read_excel(path, sheet_name=sn) for sn in xls.sheet_names]
 
 
-def build_exclusion_sets(excluir_path: str) -> tuple[set[str], set[str], set[str]]:
-    dfs = read_all_sheets_excel(excluir_path)
+def build_exclusion_sets(excluir_paths: str) -> tuple[set[str], set[str], set[str]]:
+    """
+    Construye sets de exclusión desde uno o varios archivos.
+    excluir_paths puede ser un solo archivo o varios separados por coma.
+    """
     excl_raw = set()
     excl_digits = set()
     excl_norm = set()
-
-    for df in dfs:
-        for col in df.columns:
-            for val in df[col].dropna().astype(str).tolist():
-                phones = split_into_phones(val)
-                for phone in phones:
-                    p_clean = phone.strip()
-                    if not p_clean: continue
-                    excl_raw.add(p_clean)
-                    
-                    d = digits_only(p_clean)
-                    if len(d) >= 7:
-                        excl_digits.add(d)
+    
+    # Separar por coma y limpiar espacios
+    file_list = [f.strip() for f in excluir_paths.split(",") if f.strip()]
+    
+    for file_path in file_list:
+        if not Path(file_path).exists():
+            print(f"  [WARN] Archivo no encontrado: {file_path}")
+            continue
+            
+        print(f"  Cargando: {file_path}")
+        dfs = read_all_sheets_excel(file_path)
+        
+        for df in dfs:
+            for col in df.columns:
+                for val in df[col].dropna().astype(str).tolist():
+                    phones = split_into_phones(val)
+                    for phone in phones:
+                        p_clean = phone.strip()
+                        if not p_clean: continue
+                        excl_raw.add(p_clean)
                         
-                    n = normalize_uy(p_clean)
-                    if n:
-                        excl_norm.add(n)
+                        d = digits_only(p_clean)
+                        if len(d) >= 7:
+                            excl_digits.add(d)
+                            
+                        n = normalize_uy(p_clean)
+                        if n:
+                            excl_norm.add(n)
+    
     return excl_raw, excl_digits, excl_norm
 
 
@@ -311,10 +328,9 @@ def format_598_to_09(phone_598: str) -> str:
 def main():
     print("Iniciando script v2.0...")
     cand_path = Path(CANDIDATOS_FILE)
-    exc_path = Path(EXCLUIR_FILE)
 
-    if not cand_path.exists() or not exc_path.exists():
-        print("Error: No encuentro los archivos.")
+    if not cand_path.exists():
+        print(f"Error: No encuentro el archivo de candidatos: {CANDIDATOS_FILE}")
         sys.exit(1)
     
     # Archivo de salida (un solo archivo con 2 hojas)
@@ -352,7 +368,7 @@ def main():
     print(f"Excluidos por Salidas/Ventas: {excl_sv}")
 
     # 3. Exclusión por Teléfono
-    excl_raw, excl_digits, excl_norm = build_exclusion_sets(str(exc_path))
+    excl_raw, excl_digits, excl_norm = build_exclusion_sets(EXCLUIR_FILES)
     print(f"Cargados {len(excl_norm)} teléfonos de exclusión.")
     
     df_keep, count_excl_phones = filter_whole_person_by_exclusion(df_c, col_celular, excl_raw, excl_digits, excl_norm)
